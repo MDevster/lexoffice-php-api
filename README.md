@@ -1,5 +1,14 @@
 # Lexoffice PHP API
 
+![tests](https://github.com/clicksports/lexoffice-php-api/workflows/tests/badge.svg)
+[![Latest Stable Version](https://poser.pugx.org/clicksports/lex-office-api/v)](//packagist.org/packages/clicksports/lex-office-api)
+[![License](https://poser.pugx.org/clicksports/lex-office-api/license)](//packagist.org/packages/clicksports/lex-office-api)
+
+## Requirements
+
+PHP: >= 7.4  
+Extensions: [Composer](https://getcomposer.org/), [PHP-JSON](https://www.php.net/manual/en/book.json.php)
+
 ## Install
 
 composer:  
@@ -7,6 +16,7 @@ composer:
 
 ## Usage
 
+Search for the official API Documentation [here](https://developers.lexoffice.io/docs/).  
 You need an [API Key](https://app.lexoffice.de/settings/#/public-api) for that.
 
 ### Basic
@@ -20,27 +30,42 @@ $api = new \Clicksports\LexOffice\Api($apiKey);
 ```php
 // can be any PSR-6 compatibly cache handler
 // in this example we are using symfony/cache
-$cacheInterface = new \Symfony\Component\Cache\Adapter\FilesystemAdapter([
+$cacheInterface = new \Symfony\Component\Cache\Adapter\FilesystemAdapter(
   'lexoffice',
   3600,
  __DIR__ . '/cache'
-]);
+);
 
 $api->setCacheInterface($cacheInterface);
 ```
 
 ### Contact Endpoint
 ```php
-$response = $api->contact()->getAll();
-$response = $api->contact()->get($contactId);
-$response = $api->contact()->create($data);
-$response = $api->contact()->update($contactId, $data);
+
+// get a page
+/** @var \Clicksports\LexOffice\Api $api */
+$client = $api->contact();
+
+$client->size = 100;
+$client->sortDirection = 'ASC';
+$client->sortProperty = 'name';
+
+// get a page
+$response = $client->getPage(0);    
+
+//get all
+$response = $client->getAll();
+
+// other methods
+$response = $client->get($entityId);
+$response = $client->create($data);
+$response = $client->update($entityId, $data);
 ```
 
 ### Invoices Endpoint
 ```php
 $response = $api->invoice()->getAll();
-$response = $api->invoice()->get($invoiceId);
+$response = $api->invoice()->get($entityId);
 $response = $api->invoice()->create($data);
 ```
 
@@ -70,6 +95,8 @@ $response = $api->voucher()->update($entityId, $data);
 ### Voucherlist Endpoint
 ```php
 $client = $api->voucherlist();
+
+$client->size = 100;
 $client->sortDirection = 'DESC';
 $client->sortColumn = 'voucherNumber';
 $client->types = [

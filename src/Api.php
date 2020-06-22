@@ -9,14 +9,15 @@ use Clicksports\LexOffice\OrderConfirmation\Client as OrderConfirmationClient;
 use Clicksports\LexOffice\Quotation\Client as QuotationClient;
 use Clicksports\LexOffice\Voucher\Client as VoucherClient;
 use Clicksports\LexOffice\Voucherlist\Client as VoucherlistClient;
-use Exception;
+use Clicksports\LexOffice\Exceptions\LexOfficeApiException;
+use Clicksports\LexOffice\Exceptions\CacheException;
 use GuzzleHttp\Client;
-use GuzzleHttp\Exception\ClientException;
 use GuzzleHttp\Exception\GuzzleException;
 use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Response;
 use Psr\Cache\CacheItemPoolInterface;
 use Psr\Cache\InvalidArgumentException;
+use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 use stdClass;
 use function GuzzleHttp\Psr7\stream_for;
@@ -26,7 +27,7 @@ class Api
     /**
      * the library version
      */
-    const VERSION = "0.9.1";
+    public const VERSION = "0.10.0";
 
     /**
      * the lex-office api url
@@ -67,12 +68,16 @@ class Api
     /**
      * LexOffice constructor.
      * @param string $apiKey
+     * @param Client|null $client
      */
-    public function __construct(string $apiKey)
+    public function __construct(string $apiKey, $client = null)
     {
-        $this->apiKey = $apiKey;
+        if (!$client instanceof Client) {
+            $client = new Client();
+        }
 
-        $this->client = new Client();
+        $this->apiKey = $apiKey;
+        $this->client = $client;
     }
 
     /**
@@ -83,20 +88,29 @@ class Api
      */
     public function newRequest($method, $resource, $headers = []): self
     {
-        $headers = $headers + [
-                'Authorization' => 'Bearer ' . $this->apiKey,
-                'Accept' => 'application/json',
-            ];
+        $this->setRequest(
+            new Request($method, $this->createApiUrl($resource), $headers)
+        );
 
-        if (in_array($method, ['POST', 'PUT'])) {
-            $headers['Content-Type'] = 'application/json';
+        return $this;
+    }
+
+    /**
+     * @param RequestInterface $request
+     * @return $this
+     */
+    public function setRequest(RequestInterface $request)
+    {
+        $request = $request
+            ->withHeader('Authorization', 'Bearer ' . $this->apiKey)
+            ->withHeader('Accept', 'application/json');
+
+
+        if (in_array($request->getMethod(), ['POST', 'PUT'])) {
+            $request = $request->withHeader('Content-Type', 'application/json');
         }
 
-        $this->request = new Request(
-            $method,
-            $this->createApiUrl($resource),
-            $headers
-        );
+        $this->request = $request;
 
         return $this;
     }
@@ -160,8 +174,7 @@ class Api
     /**
      * @param ResponseInterface $response
      * @return $this
-     * @throws Exception
-     * @throws InvalidArgumentException
+     * @throws CacheException
      */
     public function setCacheResponse(ResponseInterface $response): self
     {
@@ -170,43 +183,65 @@ class Api
         }
 
         if (!$this->cacheInterface) {
-            throw new Exception('response could not be cached, cacheInterface is not defined');
+            throw new CacheException('response could not be cached, cacheInterface is not defined');
         }
 
-        $cacheName = $this->getCacheName();
+        try {
+            $cacheName = $this->getCacheName();
 
-        $cache = new stdClass();
-        $cache->status = $response->getStatusCode();
-        $cache->headers = $response->getHeaders();
-        $cache->body = $response->getBody()->__toString();
-        $cache->version = $response->getProtocolVersion();
-        $cache->reason = $response->getReasonPhrase();
+            $cache = new stdClass();
+            $cache->status = $response->getStatusCode();
+            $cache->headers = $response->getHeaders();
+            $cache->body = $response->getBody()->__toString();
+            $cache->version = $response->getProtocolVersion();
+            $cache->reason = $response->getReasonPhrase();
 
-        $item = $this->cacheInterface->getItem($cacheName);
-        $item->set(\GuzzleHttp\json_encode($cache));
+            $item = $this->cacheInterface->getItem($cacheName);
+            $item->set(\GuzzleHttp\json_encode($cache));
 
-        $this->cacheInterface->save($item);
+            $this->cacheInterface->save($item);
+        } catch (InvalidArgumentException $exception) {
+            throw new CacheException(
+                'response could not set cache for request ' . $this->request->getUri()->getPath(),
+                $exception->getCode(),
+                $exception
+            );
+        }
 
         return $this;
     }
 
     /**
      * @return ResponseInterface
-     * @throws ClientException
-     * @throws Exception
-     * @throws GuzzleException
-     * @throws InvalidArgumentException
+     * @throws CacheException
+     * @throws LexOfficeApiException
      */
     public function getResponse()
     {
         $cache = null;
         if ($this->cacheInterface) {
-            $response = $cache = $this->getCacheResponse();
+            try {
+                $response = $cache = $this->getCacheResponse();
+            } catch (InvalidArgumentException $exception) {
+                throw new CacheException(
+                    'could not load cache response from request ' . $this->request->getUri()->getPath(),
+                    $exception->getCode(),
+                    $exception->getPrevious()
+                );
+            }
         }
 
         // when no cacheInterface is set or the cache is invalid
         if (!isset($response) || !$response) {
-            $response = $this->client->send($this->request);
+            try {
+                $response = $this->client->send($this->request);
+            } catch (GuzzleException $exception) {
+                throw new LexOfficeApiException(
+                    $exception->getMessage(),
+                    $exception->getCode(),
+                    $exception
+                );
+            }
         }
 
         // set cache response when cache is invalid

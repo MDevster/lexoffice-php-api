@@ -4,32 +4,18 @@
 namespace Clicksports\LexOffice\Event;
 
 use Clicksports\LexOffice\BaseClient;
-use BadMethodCallException;
-use Exception;
-use GuzzleHttp\Exception\GuzzleException;
+use Clicksports\LexOffice\Exceptions\BadMethodCallException;
+use Clicksports\LexOffice\Exceptions\CacheException;
+use Clicksports\LexOffice\Exceptions\LexOfficeApiException;
 use Psr\Http\Message\ResponseInterface;
-use Psr\Cache\InvalidArgumentException;
-use function GuzzleHttp\Psr7\stream_for;
 
 class Client extends BaseClient
 {
+    protected string $resource = 'event-subscriptions';
 
-    /**
-     * @param array $data
-     * @return ResponseInterface
-     * @throws Exception
-     * @throws InvalidArgumentException
-     * @throws GuzzleException
-     */
-    public function create(array $data)
+    public function get(string $id)
     {
-        $api = $this->api->newRequest('POST', 'event-subscriptions');
-
-        $api->request = $api->request->withBody(stream_for(
-            json_encode($data)
-        ));
-
-        return $api->getResponse();
+        throw new BadMethodCallException('method get() is not supported');
     }
 
     /**
@@ -44,9 +30,8 @@ class Client extends BaseClient
 
     /**
      * @return ResponseInterface
-     * @throws Exception
-     * @throws InvalidArgumentException
-     * @throws GuzzleException
+     * @throws CacheException
+     * @throws LexOfficeApiException
      */
     public function getAll()
     {
@@ -57,22 +42,8 @@ class Client extends BaseClient
     /**
      * @param string $id
      * @return ResponseInterface
-     * @throws Exception
-     * @throws InvalidArgumentException
-     * @throws GuzzleException
-     */
-    public function get(string $id)
-    {
-        return $this->api->newRequest('GET', 'event-subscriptions/' . $id)
-            ->getResponse();
-    }
-
-    /**
-     * @param string $id
-     * @return ResponseInterface
-     * @throws Exception
-     * @throws InvalidArgumentException
-     * @throws GuzzleException
+     * @throws CacheException
+     * @throws LexOfficeApiException
      */
     public function delete(string $id)
     {
